@@ -388,6 +388,13 @@ const exportPDF = async () => {
     const [selectedSubjectId, setSelectedSubjectId] = useState(null);
     const [selectedTermContext, setSelectedTermContext] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
+    const [importFiles, setImportFiles] = useState({
+        course: null,
+        programTagging: null,
+        curriculum: null,
+        program: null,
+        enrolledSubject: null,
+    });
 
     useEffect(() => {
         if (!settings) return;
@@ -443,6 +450,85 @@ const exportPDF = async () => {
                 message: "Import failed: " + (err.response?.data?.error || err.message),
                 severity: "error",
             });
+        }
+    };
+
+    const xlsxImportConfigs = [
+        {
+            key: "course",
+            label: "Course Import",
+            endpoint: "/import-course-xlsx",
+        },
+        {
+            key: "programTagging",
+            label: "Program Tagging Import",
+            endpoint: "/import-program-tagging-xlsx",
+        },
+        {
+            key: "curriculum",
+            label: "Curriculum Import",
+            endpoint: "/import-curriculum-xlsx",
+        },
+        {
+            key: "program",
+            label: "Program Import",
+            endpoint: "/import-program-xlsx",
+        },
+        {
+            key: "enrolledSubject",
+            label: "Enrolled Subject Import",
+            endpoint: "/import-xlsx-into-enrolled-subject",
+            requiresCampus: true,
+        },
+    ];
+
+    const handleImportFileChangeByKey = (key, file) => {
+        setImportFiles((prev) => ({
+            ...prev,
+            [key]: file || null,
+        }));
+    };
+
+    const handleXlsxImportByKey = async (config) => {
+        const file = importFiles[config.key];
+
+        if (!file) {
+            showSnack(`Please choose a file for ${config.label}`, "warning");
+            return;
+        }
+
+        if (config.requiresCampus && !campusFilter) {
+            showSnack("Please select a campus first", "warning");
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            if (config.requiresCampus) {
+                formData.append("campus", campusFilter);
+            }
+
+            const response = await axios.post(`${API_BASE_URL}${config.endpoint}`, formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+
+            if (response.data?.success) {
+                showSnack(response.data.message || `${config.label} completed`, "success");
+            } else {
+                showSnack(response.data?.error || `${config.label} failed`, "error");
+            }
+
+            setImportFiles((prev) => ({
+                ...prev,
+                [config.key]: null,
+            }));
+        } catch (error) {
+            showSnack(
+                `Import failed: ${error.response?.data?.error || error.message}`,
+                "error",
+            );
         }
     };
 
@@ -654,6 +740,101 @@ const exportPDF = async () => {
 
                 <Button onClick={exportExcel}>Export Excel</Button>
                 <Button onClick={exportPDF}>Export PDF</Button>
+            </Box>
+
+            <Box sx={{ mt: 5 }}>
+                <Typography sx={{ mb: 2 }}>
+                    XLSX Migration Imports
+                </Typography>
+
+                {xlsxImportConfigs.map((config) => {
+                    const file = importFiles[config.key];
+                    const inputId = `${config.key}-xlsx-upload`;
+
+                    return (
+                        <Box
+                            key={config.key}
+                            display="flex"
+                            alignItems="center"
+                            gap={2}
+                            sx={{ mb: 2, flexWrap: "wrap" }}
+                        >
+                            <Typography sx={{ minWidth: 230, fontWeight: 600 }}>
+                                {config.label}
+                            </Typography>
+
+                            {config.requiresCampus && (
+                                <TextField
+                                    select
+                                    label="Campus"
+                                    size="small"
+                                    value={campusFilter}
+                                    onChange={(e) => setCampusFilter(e.target.value)}
+                                    SelectProps={{ native: true }}
+                                    sx={{ width: 200 }}
+                                >
+                                    {branches.map((branch) => (
+                                        <option key={branch.id ?? branch.branch} value={branch.id ?? ""}>
+                                            {branch.branch}
+                                        </option>
+                                    ))}
+                                </TextField>
+                            )}
+
+                            <input
+                                type="file"
+                                accept=".xlsx,.xls,.csv"
+                                onChange={(e) => handleImportFileChangeByKey(config.key, e.target.files?.[0])}
+                                style={{ display: "none" }}
+                                id={inputId}
+                            />
+
+                            <button
+                                onClick={() => document.getElementById(inputId).click()}
+                                style={{
+                                    border: "2px solid green",
+                                    backgroundColor: "#f0fdf4",
+                                    color: "green",
+                                    borderRadius: "5px",
+                                    cursor: "pointer",
+                                    fontSize: "14px",
+                                    fontWeight: "bold",
+                                    height: "45px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "8px",
+                                    width: "170px",
+                                }}
+                                type="button"
+                            >
+                                <FaFileExcel size={20} />
+                                Choose Excel
+                            </button>
+
+                            {file && (
+                                <Typography sx={{ fontSize: "13px", color: "#333", fontStyle: "italic" }}>
+                                    📄 {file.name} ({formatFileSize(file.size)})
+                                </Typography>
+                            )}
+
+                            <Button
+                                variant="contained"
+                                onClick={() => handleXlsxImportByKey(config)}
+                                sx={{
+                                    backgroundColor: settings?.header_color || "#1976d2",
+                                    border: `2px solid ${borderColor}`,
+                                    color: "white",
+                                    height: "45px",
+                                    minWidth: "130px",
+                                    fontWeight: "bold",
+                                }}
+                            >
+                                Import
+                            </Button>
+                        </Box>
+                    );
+                })}
             </Box>
 
             <Snackbar
